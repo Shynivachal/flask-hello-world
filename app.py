@@ -1,54 +1,23 @@
-from flask import Flask, Response
-import subprocess
-import time
+from flask import Flask, redirect
+import yt_dlp
 import os
 
 app = Flask(__name__)
 
-YOUTUBE_VIDEO_ID = "Ko18SgceYX8"
-CACHE_FILE = "stream_cache.m3u8"
-CACHE_TIME = 60 * 60 * 24  # 24 hours
+@app.route('/')
+def get_stream():
+    url = 'https://www.youtube.com/live/Ko18SgceYX8?si=wxDFMuMrfEqd9CrM'
+    ydl_opts = {
+        'quiet': True,
+        'skip_download': True,
+        'force_generic_extractor': False,
+        'format': 'best[ext=m3u8]',
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info_dict = ydl.extract_info(url, download=False)
+        stream_url = info_dict['url']
+        return redirect(stream_url)
 
-def fetch_stream_url():
-    result = subprocess.run([
-        "yt-dlp",
-        f"https://www.youtube.com/watch?v={YOUTUBE_VIDEO_ID}",
-        "-f", "96",  # HLS stream format
-        "--get-url"
-    ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-    if result.returncode == 0:
-        return result.stdout.decode().strip()
-    else:
-        return None
-
-def update_cache():
-    url = fetch_stream_url()
-    if url:
-        with open(CACHE_FILE, "w") as f:
-            f.write(url)
-        os.utime(CACHE_FILE, None)
-
-def get_cached_url():
-    if not os.path.exists(CACHE_FILE):
-        update_cache()
-
-    now = time.time()
-    modified = os.path.getmtime(CACHE_FILE)
-    if now - modified > CACHE_TIME:
-        update_cache()
-
-    with open(CACHE_FILE, "r") as f:
-        return f.read().strip()
-
-@app.route("/asianet.m3u8")
-def asianet():
-    stream_url = get_cached_url()
-    m3u_content = f"""#EXTM3U
-#EXTINF:-1 tvg-id="asianetnews" group-title="Malayalam",Asianet News HD
-{stream_url}
-"""
-    return Response(m3u_content, mimetype='application/x-mpegURL')
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
